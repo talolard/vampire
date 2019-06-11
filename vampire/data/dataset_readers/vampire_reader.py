@@ -44,18 +44,18 @@ class VampireReader(DatasetReader):
         mat = mat.tolil()
         if self._covariate_file:
             with open(self._covariate_file, 'r') as file_:
-                covariates = [line.strip() for line in file_.readlines()]
+                labels = [line.strip() for line in file_.readlines()]
 
         for ix in range(mat.shape[0]):
             if self._covariate_file:
-                instance = self.text_to_instance(vec=mat[ix].toarray().squeeze(), covariate=covariates[ix])
+                instance = self.text_to_instance(vec=mat[ix].toarray().squeeze(), label=labels[ix])
             else:
                 instance = self.text_to_instance(vec=mat[ix].toarray().squeeze())
             if instance is not None:
                 yield instance
 
     @overrides
-    def text_to_instance(self, vec: str, covariate: str=None) -> Instance:  # type: ignore
+    def text_to_instance(self, vec: str, label: str=None) -> Instance:  # type: ignore
         """
         Parameters
         ----------
@@ -75,6 +75,6 @@ class VampireReader(DatasetReader):
         # pylint: disable=arguments-differ
         fields: Dict[str, Field] = {}
         fields['tokens'] = ArrayField(vec)
-        if covariate:
-            fields['covariate_label'] = LabelField(covariate, skip_indexing=False)
+        if label:
+            fields['label'] = LabelField(label, skip_indexing=False)
         return Instance(fields)

@@ -123,6 +123,7 @@ if __name__ == '__main__':
     
     if sources:
         write_list_to_file(sources, os.path.join(args.serialization_dir, "sources.txt"))
+        write_list_to_file(['@@UNKNOWN@@'] + list(set(sources)), os.path.join(args.vocabulary_dir, "covariate.txt"))
 
     write_list_to_file(['@@UNKNOWN@@'] + count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
     write_list_to_file(['*tags', '*labels', 'vampire'], os.path.join(vocabulary_dir, "non_padded_namespaces.txt"))
