@@ -34,7 +34,6 @@ local BASE_READER(LAZY) = {
       "track_npmi": std.parseInt(std.extVar("TRACK_NPMI")) == 1,
       "vae": {
          "z_dropout": std.extVar("Z_DROPOUT"),
-         "apply_batchnorm": std.parseInt(std.extVar("APPLY_BATCHNORM_1")) == 1,
          "encoder": {
             "activations": std.makeArray(std.parseInt(std.extVar("NUM_ENCODER_LAYERS")), function(i) std.extVar("ENCODER_ACTIVATION")),
             "hidden_dims": std.makeArray(std.parseInt(std.extVar("NUM_ENCODER_LAYERS")), function(i) std.parseInt(std.extVar("VAE_HIDDEN_DIM"))),

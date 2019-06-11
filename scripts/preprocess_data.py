@@ -2,7 +2,7 @@ import argparse
 import json
 import os
 from typing import List
-
+import time
 import nltk
 import numpy as np
 import pandas as pd
@@ -13,6 +13,9 @@ from sklearn.feature_extraction.text import CountVectorizer
 from spacy.tokenizer import Tokenizer
 from tqdm import tqdm
 
+import multiprocessing
+from multiprocessing import Pool
+from allennlp.common.file_utils import cached_path
 from vampire.common.util import read_text, save_sparse, write_to_json
 
 
@@ -38,7 +41,20 @@ def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "jus
             tokenized_examples.append(text)
     return tokenized_examples
 
-def main():
+def write_list_to_file(ls, save_path):
+    """
+    Write each json object in 'jsons' as its own line in the file designated by 'save_path'.
+    """
+    # Open in appendation mode given that this function may be called multiple
+    # times on the same file (positive and negative sentiment are in separate
+    # directories).
+    out_file = open(save_path, "w+")
+    for example in ls:
+        out_file.write(example)
+        out_file.write('\n')
+
+
+if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--train-path", type=str, required=True,
                         help="Path to the train jsonl file.")
@@ -47,6 +63,8 @@ def main():
     parser.add_argument("--serialization-dir", "-s", type=str, required=True,
                         help="Path to store the preprocessed output.")
     parser.add_argument("--vocab-size", type=int, required=False, default=10000,
+                        help="Path to store the preprocessed corpus vocabulary (output file name).")
+    parser.add_argument("--vocabulary", type=str, required=False, default=None,
                         help="Path to store the preprocessed corpus vocabulary (output file name).")
     parser.add_argument("--tokenize", action='store_true',
                         help="Path to store the preprocessed corpus vocabulary (output file name).") 
@@ -62,24 +80,23 @@ def main():
     if not os.path.isdir(vocabulary_dir):
         os.mkdir(vocabulary_dir)
 
-    tokenized_train_examples = load_data(args.train_path, args.tokenize, args.tokenizer_type)
-    tokenized_dev_examples = load_data(args.dev_path, args.tokenize, args.tokenizer_type)
+    tokenized_train_examples = load_data(cached_path(args.train_path), args.tokenize, args.tokenizer_type)
+    tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type)
+    count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
+
+    if args.vocabulary:
+        with open(cached_path(args.vocabulary)) as vocab_file:
+            count_vectorizer.vocabulary = vocab_file.readlines()
 
     print("fitting count vectorizer...")
-
-    count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
     
     text = tokenized_train_examples + tokenized_dev_examples
-    
-    count_vectorizer.fit(text)
 
-    vectorized_train_examples = count_vectorizer.transform(tokenized_train_examples)
-    vectorized_dev_examples = count_vectorizer.transform(tokenized_dev_examples)
+    count_vectorizer.fit(tqdm(text))
 
-    dev_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
-    reference_matrix = dev_count_vectorizer.fit_transform(tokenized_dev_examples)
-    reference_vocabulary = dev_count_vectorizer.get_feature_names()
-
+    vectorized_train_examples = count_vectorizer.transform(tqdm(tokenized_train_examples))
+    vectorized_dev_examples = count_vectorizer.transform(tqdm(tokenized_dev_examples))
+   
     # add @@unknown@@ token vector
     vectorized_train_examples = sparse.hstack((np.array([0] * len(tokenized_train_examples))[:,None], vectorized_train_examples))
     vectorized_dev_examples = sparse.hstack((np.array([0] * len(tokenized_dev_examples))[:,None], vectorized_dev_examples))
@@ -87,8 +104,8 @@ def main():
 
     # generate background frequency
     print("generating background frequency...")
-    bgfreq = dict(zip(count_vectorizer.get_feature_names(), master.toarray().sum(1) / args.vocab_size))
-
+    bgfreq = dict(zip(count_vectorizer.get_feature_names(), np.asarray(master.sum(1)).squeeze(1) / args.vocab_size))
+    
     print("saving data...")
     save_sparse(vectorized_train_examples, os.path.join(args.serialization_dir, "train.npz"))
     save_sparse(vectorized_dev_examples, os.path.join(args.serialization_dir, "dev.npz"))
@@ -98,17 +115,3 @@ def main():
     write_list_to_file(['@@UNKNOWN@@'] + count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
     write_list_to_file(['*tags', '*labels', 'vampire'], os.path.join(vocabulary_dir, "non_padded_namespaces.txt"))
 
-def write_list_to_file(ls, save_path):
-    """
-    Write each json object in 'jsons' as its own line in the file designated by 'save_path'.
-    """
-    # Open in appendation mode given that this function may be called multiple
-    # times on the same file (positive and negative sentiment are in separate
-    # directories).
-    out_file = open(save_path, "w+")
-    for example in ls:
-        out_file.write(example)
-        out_file.write('\n')
-
-if __name__ == '__main__':
-    main()

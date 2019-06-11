@@ -98,7 +98,7 @@ class VAMPIRE(Model):
         self._background_freq = self.initialize_bg_from_file(file_=background_data_path)
         self._ref_counts = reference_counts
         
-        if reference_vocabulary is not None:
+        if reference_vocabulary and self.track_npmi:
             # Compute data necessary to compute NPMI every epoch
             logger.info("Loading reference vocabulary.")
             self._ref_vocab = read_json(cached_path(reference_vocabulary))
@@ -409,6 +409,8 @@ class VAMPIRE(Model):
         loss = -torch.mean(elbo) 
 
         output_dict['loss'] = loss
+        if torch.isnan(loss):
+            import ipdb; ipdb.set_trace()
         theta = variational_output['theta']
 
         # Keep track of internal states for use downstream

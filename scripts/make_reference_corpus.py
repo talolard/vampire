@@ -10,6 +10,7 @@ import numpy as np
 from scipy import sparse
 from tqdm import tqdm
 
+from allennlp.common.file_utils import cached_path
 from vampire.common.util import (read_jsonlist,
                                  read_text,
                                  save_sparse,
@@ -53,7 +54,7 @@ def main(args):
 
     (options, args) = parser.parse_args(args)
 
-    train_infile = args[0]
+    train_infile = cached_path(args[0])
     output_dir = args[1]
 
     test_infile = options.test
