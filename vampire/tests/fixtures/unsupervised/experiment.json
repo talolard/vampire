@@ -1,7 +1,8 @@
 {
     "dataset_reader": {
       "lazy": false,
-      "type": "vampire_reader"
+      "type": "vampire_reader",
+      "covariate_file": "vampire/tests/fixtures/imdb/sources.txt"
   },
   "train_data_path": "vampire/tests/fixtures/imdb/train.npz",
   "validation_data_path": "vampire/tests/fixtures/imdb/test.npz",
@@ -46,7 +47,6 @@
           "hidden_dims": [279],
           "activations": ["tanh"]
         },
-        "apply_batchnorm": true,
         "z_dropout": 0.2
       }
     },

@@ -56,8 +56,8 @@ def write_list_to_file(ls, save_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--train-path", type=str, required=True,
-                        help="Path to the train jsonl file.")
+    parser.add_argument("--train-path", nargs='+' type=str, required=True,
+                        help="Path(s) to the train jsonl file(s).")
     parser.add_argument("--dev-path", type=str, required=True,
                         help="Path to the dev jsonl file.")
     parser.add_argument("--serialization-dir", "-s", type=str, required=True,
@@ -79,8 +79,17 @@ if __name__ == '__main__':
 
     if not os.path.isdir(vocabulary_dir):
         os.mkdir(vocabulary_dir)
-
-    tokenized_train_examples = load_data(cached_path(args.train_path), args.tokenize, args.tokenizer_type)
+    
+    tokenized_train_examples = []
+    sources = []
+    
+    if len(args.train_path) > 1:
+        for ix, file_ in enumerate(args.train_path):
+            tokenized_train_examples.append(load_data(cached_path(file_), args.tokenize, args.tokenizer_type))
+            sources.append([ix] * len(tokenized_train_examples))
+    else:
+        tokenized_train_examples = load_data(cached_path(args.train_path), args.tokenize, args.tokenizer_type)
+    
     tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type)
     count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
 
@@ -112,6 +121,9 @@ if __name__ == '__main__':
 
     write_to_json(bgfreq, os.path.join(args.serialization_dir, "vampire.bgfreq"))
     
+    if sources:
+        write_list_to_file(sources, os.path.join(args.serialization_dir, "sources.txt"))
+
     write_list_to_file(['@@UNKNOWN@@'] + count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
     write_list_to_file(['*tags', '*labels', 'vampire'], os.path.join(vocabulary_dir, "non_padded_namespaces.txt"))
 

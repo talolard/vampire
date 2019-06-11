@@ -34,20 +34,28 @@ class VampireReader(DatasetReader):
     lazy : ``bool``, optional, (default = ``False``)
         Whether or not instances can be read lazily.
     """
-    def __init__(self, lazy: bool = False) -> None:
+    def __init__(self, lazy: bool = False, covariate_file: str = None) -> None:
         super().__init__(lazy=lazy)
+        self._covariate_file = covariate_file
 
     @overrides
     def _read(self, file_path):
         mat = load_sparse(file_path)        
         mat = mat.tolil()
+        if self._covariate_file:
+            with open(self._covariate_file, 'r') as file_:
+                covariates = [line.strip() for line in file_.readlines()]
+
         for ix in range(mat.shape[0]):
-            instance = self.text_to_instance(vec=mat[ix].toarray().squeeze())
+            if self._covariate_file:
+                instance = self.text_to_instance(vec=mat[ix].toarray().squeeze(), covariate=covariates[ix])
+            else:
+                instance = self.text_to_instance(vec=mat[ix].toarray().squeeze())
             if instance is not None:
                 yield instance
 
     @overrides
-    def text_to_instance(self, vec: str=None) -> Instance:  # type: ignore
+    def text_to_instance(self, vec: str, covariate: str=None) -> Instance:  # type: ignore
         """
         Parameters
         ----------
@@ -67,4 +75,6 @@ class VampireReader(DatasetReader):
         # pylint: disable=arguments-differ
         fields: Dict[str, Field] = {}
         fields['tokens'] = ArrayField(vec)
+        if covariate:
+            fields['covariate_label'] = LabelField(covariate, skip_indexing=False)
         return Instance(fields)

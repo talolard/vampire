@@ -97,7 +97,7 @@ class VAMPIRE(Model):
         self._update_background_freq = update_background_freq
         self._background_freq = self.initialize_bg_from_file(file_=background_data_path)
         self._ref_counts = reference_counts
-        
+        self._num_covariates = self.vocab.get_vocab_size("covariate")
         if reference_vocabulary and self.track_npmi:
             # Compute data necessary to compute NPMI every epoch
             logger.info("Loading reference vocabulary.")
@@ -351,6 +351,8 @@ class VAMPIRE(Model):
     @overrides
     def forward(self,  # pylint: disable=arguments-differ
                 tokens: Union[Dict[str, torch.IntTensor], torch.IntTensor],
+                covariate: torch.IntTensor = None,
+                num_covariates: int = None,
                 epoch_num: List[int] = None):
         """
         Parameters
@@ -382,6 +384,15 @@ class VAMPIRE(Model):
                                .to(device=self.device))
         else:
             embedded_tokens = tokens
+
+        embeddings = [embedded_tokens]
+        
+        if covariate:
+            covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
+                                                    self._num_covariates).to(device=self.device)
+            covariate_embedding.zero_()
+            covariate_embedding.scatter_(1, covariate.unsqueeze(-1), 1)
+            embeddings.append(covariate_embedding)
 
         # Encode the text into a shared representation for both the VAE
         # and downstream classifiers to use.
