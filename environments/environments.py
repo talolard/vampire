@@ -39,7 +39,7 @@ CLASSIFIER = {
 }
 
 VAMPIRE = {
-        "LAZY_DATASET_READER": 0,
+        "LAZY_DATASET_READER": 1,
         "KL_ANNEALING": "linear",
         "SIGMOID_WEIGHT_1": 0.25,
         "SIGMOID_WEIGHT_2": 15,
