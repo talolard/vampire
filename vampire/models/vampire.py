@@ -87,7 +87,7 @@ class VAMPIRE(Model):
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super().__init__(vocab, regularizer)
 
-        self.metrics = {'nkld': Average(), 'nll': Average()}
+        self.metrics = {'nkld': Average(), 'nll': Average(), 'acc': CategoricalAccuracy()}
         self.vocab = vocab
         self.vae = vae
         self.track_topics = track_topics
@@ -97,6 +97,10 @@ class VAMPIRE(Model):
         self._background_freq = self.initialize_bg_from_file(file_=background_data_path)
         self._ref_counts = reference_counts
         self._num_labels = self.vocab.get_vocab_size("labels")
+        self._label_prediction_layer = torch.nn.Linear(self.vae.encoder.get_output_dim(),
+                                                       self._num_labels)
+        self._cross_entropy = torch.nn.CrossEntropyLoss()
+
         if reference_vocabulary and self.track_npmi:
             # Compute data necessary to compute NPMI every epoch
             logger.info("Loading reference vocabulary.")
@@ -417,10 +421,21 @@ class VAMPIRE(Model):
 
         loss = -torch.mean(elbo) 
 
-        output_dict['loss'] = loss
+        theta = variational_output['theta']
+
+        logits = self._label_prediction_layer(theta)
+
+        if label is not None:
+            label_prediction_loss = self._cross_entropy(logits, label.long().view(-1))
+            label_prediction_acc = self.metrics['acc'](logits, label)
+            output_dict['acc'] = label_prediction_acc
+        else:
+            label_prediction_loss = 0
+
+        output_dict['loss'] = loss + label_prediction_loss
+        
         if torch.isnan(loss):
             import ipdb; ipdb.set_trace()
-        theta = variational_output['theta']
 
         # Keep track of internal states for use downstream
         activations: List[Tuple[str, torch.FloatTensor]] = []
@@ -433,16 +448,19 @@ class VAMPIRE(Model):
         
         output_dict['activations'] = activations
 
+        
+        
         # Update metrics
         self.metrics['nkld'](-torch.mean(negative_kl_divergence))
         self.metrics['nll'](-torch.mean(reconstruction_loss))
-
+        
         # batch_num is tracked for kl weight annealing
         self.batch_num += 1
 
         self.compute_custom_metrics_once_per_epoch(epoch_num)
 
         self.metrics['npmi'] = self._cur_npmi
+        self.metrics['kld_weight'] = self._kld_weight
 
         return output_dict
 

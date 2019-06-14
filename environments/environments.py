@@ -40,7 +40,9 @@ CLASSIFIER = {
 
 VAMPIRE = {
         "LAZY_DATASET_READER": 1,
-        "KL_ANNEALING": "constant",
+        "KL_ANNEALING": "sigmoid",
+        "COVARIATE_TRAIN_FILE": os.environ["DATA_DIR"] + "/sources.txt",
+        "COVARIATE_DEV_FILE": os.environ["DATA_DIR"] + "/sources.txt",
         "SIGMOID_WEIGHT_1": 0.25,
         "SIGMOID_WEIGHT_2": 15,
         "LINEAR_SCALING": 1000,
@@ -59,13 +61,13 @@ VAMPIRE = {
         "NUM_LOG_VAR_PROJECTION_LAYERS": 1,
         "SEED": 34543,
         "Z_DROPOUT": 0.49,
-        "LEARNING_RATE": 0.00003,
-        "TRACK_NPMI": False,
+        "LEARNING_RATE": 0.00005,
+        "TRACK_NPMI": True,
         "CUDA_DEVICE": 0,
         "UPDATE_BACKGROUND_FREQUENCY": 0,
         "VOCAB_SIZE": 30000,
         "APPLY_BATCHNORM": 1,
-        "BATCH_SIZE": 128,
+        "BATCH_SIZE": 64,
         "VALIDATION_METRIC": "+npmi"
 }
 

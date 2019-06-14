@@ -1,16 +1,18 @@
 local CUDA_DEVICE = std.parseInt(std.extVar("CUDA_DEVICE"));
 
-local BASE_READER(LAZY) = {
+local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE) = {
   "lazy": LAZY == 1,
-  "type": "vampire_reader"
+  "type": "vampire_reader",
+  "covariate_train_file": COVARIATE_TRAIN_FILE,
+  "covariate_dev_file": COVARIATE_DEV_FILE,
 };
 
 {
    "numpy_seed": std.extVar("SEED"),
    "pytorch_seed": std.extVar("SEED"),
    "random_seed": std.extVar("SEED"),
-   "dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER"))),
-   "validation_dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER"))),
+   "dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER")), std.extVar("COVARIATE_TRAIN_FILE"), std.extVar("COVARIATE_DEV_FILE")),
+   "validation_dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER")), std.extVar("COVARIATE_TRAIN_FILE"), std.extVar("COVARIATE_DEV_FILE")),
    "train_data_path": std.extVar("TRAIN_PATH"),
    "validation_data_path": std.extVar("DEV_PATH"),
    "vocabulary": {

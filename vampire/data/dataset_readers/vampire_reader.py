@@ -34,20 +34,27 @@ class VampireReader(DatasetReader):
     lazy : ``bool``, optional, (default = ``False``)
         Whether or not instances can be read lazily.
     """
-    def __init__(self, lazy: bool = False, covariate_file: str = None) -> None:
+    def __init__(self, lazy: bool = False, covariate_train_file: str = None, covariate_dev_file: str = None) -> None:
         super().__init__(lazy=lazy)
-        self._covariate_file = covariate_file
+        self._covariate_train_file = covariate_train_file
+        self._covariate_dev_file = covariate_dev_file
 
     @overrides
     def _read(self, file_path):
         mat = load_sparse(file_path)        
         mat = mat.tolil()
-        if self._covariate_file:
-            with open(self._covariate_file, 'r') as file_:
+        if 'train' in file_path:
+            covariate_file = self._covariate_train_file
+        else:
+            covariate_file = self._covariate_dev_file
+        
+        if covariate_file:
+            with open(covariate_file, 'r') as file_:
                 labels = [line.strip() for line in file_.readlines()]
+                    
 
         for ix in range(mat.shape[0]):
-            if self._covariate_file:
+            if covariate_file:
                 instance = self.text_to_instance(vec=mat[ix].toarray().squeeze(), label=labels[ix])
             else:
                 instance = self.text_to_instance(vec=mat[ix].toarray().squeeze())

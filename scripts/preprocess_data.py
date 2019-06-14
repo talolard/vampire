@@ -56,9 +56,9 @@ def write_list_to_file(ls, save_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--train-path", nargs='+' type=str, required=True,
+    parser.add_argument("--train-path", nargs='+', type=str, required=True,
                         help="Path(s) to the train jsonl file(s).")
-    parser.add_argument("--dev-path", type=str, required=True,
+    parser.add_argument("--dev-path", nargs='+', type=str, required=True,
                         help="Path to the dev jsonl file.")
     parser.add_argument("--serialization-dir", "-s", type=str, required=True,
                         help="Path to store the preprocessed output.")
@@ -79,41 +79,51 @@ if __name__ == '__main__':
 
     if not os.path.isdir(vocabulary_dir):
         os.mkdir(vocabulary_dir)
-    
-    tokenized_train_examples = []
-    sources = []
-    
-    if len(args.train_path) > 1:
-        for ix, file_ in enumerate(args.train_path):
-            tokenized_train_examples.append(load_data(cached_path(file_), args.tokenize, args.tokenizer_type))
-            sources.append([ix] * len(tokenized_train_examples))
-    else:
-        tokenized_train_examples = load_data(cached_path(args.train_path), args.tokenize, args.tokenizer_type)
-    
-    tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type)
-    count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
 
-    if args.vocabulary:
-        with open(cached_path(args.vocabulary)) as vocab_file:
-            count_vectorizer.vocabulary = vocab_file.readlines()
+    vocabulary: List[str] = []
+    master_train_examples = []
+    train_sources = []
+    for ix, file_ in enumerate(args.train_path):
+        tokenized_train_examples = load_data(cached_path(file_), args.tokenize, args.tokenizer_type)
+        train_sources.extend([str(ix)] * len(tokenized_train_examples))
+        sub_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
+        sub_count_vectorizer.fit(tokenized_train_examples)
+        master_train_examples.extend(tokenized_train_examples)
+        vocabulary.extend(sub_count_vectorizer.get_feature_names())
+
+    dev_sources = []
+    master_dev_examples = []
+    for ix, file_ in enumerate(args.dev_path):
+        tokenized_dev_examples = load_data(cached_path(file_), args.tokenize, args.tokenizer_type)
+        dev_sources.extend([str(ix)] * len(tokenized_dev_examples))
+        sub_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
+        sub_count_vectorizer.fit(tokenized_dev_examples)
+        master_dev_examples.extend(tokenized_dev_examples)
+        vocabulary.extend(sub_count_vectorizer.get_feature_names())
+
+    # tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type)
+
+    vocabulary = list(set(vocabulary))
+    master_count_vectorizer = CountVectorizer(stop_words='english', token_pattern=r'\b[^\d\W]{3,30}\b')
+    master_count_vectorizer.vocabulary = vocabulary
 
     print("fitting count vectorizer...")
     
-    text = tokenized_train_examples + tokenized_dev_examples
+    text = master_train_examples + master_dev_examples
 
-    count_vectorizer.fit(tqdm(text))
+    master_count_vectorizer.fit(tqdm(text))
 
-    vectorized_train_examples = count_vectorizer.transform(tqdm(tokenized_train_examples))
-    vectorized_dev_examples = count_vectorizer.transform(tqdm(tokenized_dev_examples))
+    vectorized_train_examples = master_count_vectorizer.transform(tqdm(master_train_examples))
+    vectorized_dev_examples = master_count_vectorizer.transform(tqdm(master_dev_examples))
    
     # add @@unknown@@ token vector
-    vectorized_train_examples = sparse.hstack((np.array([0] * len(tokenized_train_examples))[:,None], vectorized_train_examples))
+    vectorized_train_examples = sparse.hstack((np.array([0] * len(master_train_examples))[:,None], vectorized_train_examples))
     vectorized_dev_examples = sparse.hstack((np.array([0] * len(tokenized_dev_examples))[:,None], vectorized_dev_examples))
     master = sparse.vstack([vectorized_train_examples, vectorized_dev_examples])
 
     # generate background frequency
     print("generating background frequency...")
-    bgfreq = dict(zip(count_vectorizer.get_feature_names(), np.asarray(master.sum(1)).squeeze(1) / args.vocab_size))
+    bgfreq = dict(zip(master_count_vectorizer.get_feature_names(), np.asarray(master.sum(1)).squeeze(1) / args.vocab_size))
     
     print("saving data...")
     save_sparse(vectorized_train_examples, os.path.join(args.serialization_dir, "train.npz"))
@@ -121,10 +131,11 @@ if __name__ == '__main__':
 
     write_to_json(bgfreq, os.path.join(args.serialization_dir, "vampire.bgfreq"))
     
-    if sources:
-        write_list_to_file(sources, os.path.join(args.serialization_dir, "sources.txt"))
-        write_list_to_file(['@@UNKNOWN@@'] + list(set(sources)), os.path.join(args.vocabulary_dir, "covariate.txt"))
+    if train_sources:
+        write_list_to_file(train_sources, os.path.join(args.serialization_dir, "train_sources.txt"))
+        write_list_to_file(dev_sources, os.path.join(args.serialization_dir, "dev_sources.txt"))
+        write_list_to_file(['@@UNKNOWN@@'] + list(set(train_sources)), os.path.join(vocabulary_dir, "labels.txt"))
 
-    write_list_to_file(['@@UNKNOWN@@'] + count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
+    write_list_to_file(['@@UNKNOWN@@'] + master_count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
     write_list_to_file(['*tags', '*labels', 'vampire'], os.path.join(vocabulary_dir, "non_padded_namespaces.txt"))
 
