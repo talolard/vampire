@@ -1,7 +1,7 @@
 import argparse
 import json
 import os
-from typing import List
+from typing import List, Dict
 import time
 import nltk
 import numpy as np
@@ -10,6 +10,7 @@ import spacy
 from allennlp.data.tokenizers.word_splitter import SpacyWordSplitter
 from scipy import sparse
 from sklearn.feature_extraction.text import CountVectorizer
+from nltk.tokenize import TweetTokenizer
 from spacy.tokenizer import Tokenizer
 from tqdm import tqdm
 
@@ -19,13 +20,14 @@ from allennlp.common.file_utils import cached_path
 from vampire.common.util import read_text, save_sparse, write_to_json
 
 
-def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "just_spaces") -> List[str]:
+def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "just_spaces") -> List[Dict[str, str]]:
     if tokenizer_type == "just_spaces":
         tokenizer = SpacyWordSplitter()
     elif tokenizer_type == "spacy":
         nlp = spacy.load('en')
         tokenizer = Tokenizer(nlp.vocab)
-
+    elif tokenizer_type == "twitter":
+        tokenizer = TweetTokenizer()
     tokenized_examples = []
     with tqdm(open(data_path, "r"), desc=f"loading {data_path}") as f:
         for line in f:
@@ -35,10 +37,12 @@ def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "jus
                     tokens = list(map(str, tokenizer.split_words(example['text'])))
                 elif tokenizer_type == 'spacy':
                     tokens = list(map(str, tokenizer(example['text'])))
+                elif tokenizer_type == "twitter":
+                    tokens = tokenizer.tokenize(example['text'])
                 text = ' '.join(tokens)
             else:
                 text = example['text']
-            tokenized_examples.append(text)
+            tokenized_examples.append(example)
     return tokenized_examples
 
 def write_list_to_file(ls, save_path):
@@ -85,20 +89,22 @@ if __name__ == '__main__':
     train_sources = []
     for ix, file_ in enumerate(args.train_path):
         tokenized_train_examples = load_data(cached_path(file_), args.tokenize, args.tokenizer_type)
-        train_sources.extend([str(ix)] * len(tokenized_train_examples))
+        train_sources.extend([example['timestamp'][-5:] for example in tokenized_train_examples])
+        # train_sources.extend([str(ix)] * len(tokenized_train_examples))
         sub_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
-        sub_count_vectorizer.fit(tokenized_train_examples)
-        master_train_examples.extend(tokenized_train_examples)
+        sub_count_vectorizer.fit([example['text'] for example in tokenized_train_examples])
+        master_train_examples.extend([example['text'] for example in tokenized_train_examples])
         vocabulary.extend(sub_count_vectorizer.get_feature_names())
 
     dev_sources = []
     master_dev_examples = []
     for ix, file_ in enumerate(args.dev_path):
         tokenized_dev_examples = load_data(cached_path(file_), args.tokenize, args.tokenizer_type)
-        dev_sources.extend([str(ix)] * len(tokenized_dev_examples))
+        dev_sources.extend([example['timestamp'][-5:] for example in tokenized_train_examples])
+        # dev_sources.extend([str(ix)] * len(tokenized_dev_examples))
         sub_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
-        sub_count_vectorizer.fit(tokenized_dev_examples)
-        master_dev_examples.extend(tokenized_dev_examples)
+        sub_count_vectorizer.fit([example['text'] for example in tokenized_dev_examples])
+        master_dev_examples.extend([example['text'] for example in tokenized_dev_examples])
         vocabulary.extend(sub_count_vectorizer.get_feature_names())
 
     # tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type)
@@ -111,10 +117,11 @@ if __name__ == '__main__':
     
     text = master_train_examples + master_dev_examples
 
-    master_count_vectorizer.fit(tqdm(text))
+    master_count_vectorizer.fit(tqdm(text, desc="all"))
 
-    vectorized_train_examples = master_count_vectorizer.transform(tqdm(master_train_examples))
-    vectorized_dev_examples = master_count_vectorizer.transform(tqdm(master_dev_examples))
+    print("transforming examples...")
+    vectorized_train_examples = master_count_vectorizer.transform(tqdm(master_train_examples, desc="train"))
+    vectorized_dev_examples = master_count_vectorizer.transform(tqdm(master_dev_examples, desc="dev"))
    
     # add @@unknown@@ token vector
     vectorized_train_examples = sparse.hstack((np.array([0] * len(master_train_examples))[:,None], vectorized_train_examples))

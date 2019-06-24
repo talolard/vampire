@@ -1,6 +1,7 @@
 import itertools
 import json
 import logging
+from glob import glob
 from io import TextIOWrapper
 from typing import Dict
 
@@ -34,35 +35,40 @@ class VampireReader(DatasetReader):
     lazy : ``bool``, optional, (default = ``False``)
         Whether or not instances can be read lazily.
     """
-    def __init__(self, lazy: bool = False, covariate_train_file: str = None, covariate_dev_file: str = None) -> None:
+    def __init__(self, lazy: bool = False, covariates: Dict[str, str] = None) -> None:
         super().__init__(lazy=lazy)
-        self._covariate_train_file = covariate_train_file
-        self._covariate_dev_file = covariate_dev_file
+        self._covariates = covariates.as_dict()
 
     @overrides
     def _read(self, file_path):
         mat = load_sparse(file_path)        
         mat = mat.tolil()
-        if 'train' in file_path:
-            covariate_file = self._covariate_train_file
-        else:
-            covariate_file = self._covariate_dev_file
-        
-        if covariate_file:
-            with open(covariate_file, 'r') as file_:
-                labels = [line.strip() for line in file_.readlines()]
-                    
+        covariate_files = {}
 
+        for key, val in self._covariates.items():
+            covariate_files[key] = glob(val)
+        labels = {}
+        if covariate_files:
+            for label, cov_files in covariate_files.items():
+                if 'train' in file_path:
+                    cov_to_use = [x for x in cov_files if "train" in x][0]
+                elif 'dev' in file_path:
+                    cov_to_use = [x for x in cov_files if "dev" in x][0]
+                elif 'test' in file_path:
+                    cov_to_use = [x for x in cov_files if "test" in x][0]                
+                with open(cov_to_use, 'r') as file_:
+                    labels[label] = [line.strip() for line in file_.readlines()]
         for ix in range(mat.shape[0]):
-            if covariate_file:
-                instance = self.text_to_instance(vec=mat[ix].toarray().squeeze(), label=labels[ix])
+            if labels:
+                label_subset = {key: val[ix] for key, val in labels.items()}
+                instance = self.text_to_instance(mat[ix].toarray().squeeze(), **label_subset)
             else:
-                instance = self.text_to_instance(vec=mat[ix].toarray().squeeze())
+                instance = self.text_to_instance(mat[ix].toarray().squeeze())
             if instance is not None:
                 yield instance
 
     @overrides
-    def text_to_instance(self, vec: str, label: str=None) -> Instance:  # type: ignore
+    def text_to_instance(self, vec: str, **labels) -> Instance:  # type: ignore
         """
         Parameters
         ----------
@@ -82,6 +88,6 @@ class VampireReader(DatasetReader):
         # pylint: disable=arguments-differ
         fields: Dict[str, Field] = {}
         fields['tokens'] = ArrayField(vec)
-        if label:
-            fields['label'] = LabelField(label, skip_indexing=False)
+        for label, val in labels.items():
+            fields[label + "_labels"] = LabelField(val, label_namespace=label + "_labels", skip_indexing=False)
         return Instance(fields)

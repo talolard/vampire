@@ -87,7 +87,7 @@ class VAMPIRE(Model):
                  regularizer: Optional[RegularizerApplicator] = None) -> None:
         super().__init__(vocab, regularizer)
 
-        self.metrics = {'nkld': Average(), 'nll': Average(), 'acc': CategoricalAccuracy()}
+        self.metrics = {'nkld': Average(), 'nll': Average()}
         self.vocab = vocab
         self.vae = vae
         self.track_topics = track_topics
@@ -96,9 +96,13 @@ class VAMPIRE(Model):
         self._update_background_freq = update_background_freq
         self._background_freq = self.initialize_bg_from_file(file_=background_data_path)
         self._ref_counts = reference_counts
-        self._num_labels = self.vocab.get_vocab_size("labels")
-        self._label_prediction_layer = torch.nn.Linear(self.vae.encoder.get_output_dim(),
-                                                       self._num_labels)
+        self._prediction_layers = {}
+        self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
+        
+        for label in self._label_namespaces:
+            self.metrics[label+'_acc'] = CategoricalAccuracy()
+            self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
+                                                       self.vocab.get_vocab_size(label))
         self._cross_entropy = torch.nn.CrossEntropyLoss()
 
         if reference_vocabulary and self.track_npmi:
@@ -159,6 +163,7 @@ class VAMPIRE(Model):
             path to background frequency file
         """
         background_freq = compute_background_log_frequency(self.vocab, self.vocab_namespace, file_)
+        
         return torch.nn.Parameter(background_freq, requires_grad=self._update_background_freq)
 
     @staticmethod
@@ -354,8 +359,8 @@ class VAMPIRE(Model):
     @overrides
     def forward(self,  # pylint: disable=arguments-differ
                 tokens: Union[Dict[str, torch.IntTensor], torch.IntTensor],
-                label: torch.IntTensor = None,
-                epoch_num: List[int] = None):
+                epoch_num: List[int]=None,
+                **labels: torch.IntTensor):
         """
         Parameters
         ----------
@@ -388,17 +393,26 @@ class VAMPIRE(Model):
             embedded_tokens = tokens
 
         embeddings = [embedded_tokens]
-        
-        if label is not None:
-            covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
-                                                    self._num_labels).to(device=self.device)
-            covariate_embedding.zero_()
-            covariate_embedding.scatter_(1, label.unsqueeze(-1), 1)
-            embeddings.append(covariate_embedding)
+        if labels:
+            for key in self._label_namespaces:
+                covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
+                                                        self.vocab.get_vocab_size(key)).to(device=self.device)
+                covariate_embedding.zero_()
+                covariate_embedding.scatter_(1, labels[key].unsqueeze(-1), 1)
+                embeddings.append(covariate_embedding)
+        else:
+            for key in self._label_namespaces:
+                covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
+                                                        self.vocab.get_vocab_size(key)).to(device=self.device)
+                covariate_embedding.zero_()
+                dummy = torch.from_numpy(np.array(self.vocab._token_to_index[key]['@@UNKNOWN@@'])).repeat(embedded_tokens.shape[0], 1)
+                covariate_embedding.scatter_(1, dummy, 1)
+                embeddings.append(covariate_embedding)
 
+        embeddings = torch.cat(embeddings, dim=-1)
         # Encode the text into a shared representation for both the VAE
         # and downstream classifiers to use.
-        encoder_output = self.vae.encoder(embedded_tokens)
+        encoder_output = self.vae.encoder(embeddings)
 
         # Perform variational inference.
         variational_output = self.vae(encoder_output)
@@ -423,23 +437,27 @@ class VAMPIRE(Model):
 
         theta = variational_output['theta']
 
-        logits = self._label_prediction_layer(theta)
+        logits = {}
+        for key in self._label_namespaces:
+            logits[key] = self._prediction_layers[key](theta)
 
-        if label is not None:
-            label_prediction_loss = self._cross_entropy(logits, label.long().view(-1))
-            label_prediction_acc = self.metrics['acc'](logits, label)
-            output_dict['acc'] = label_prediction_acc
+        label_prediction_loss = {}
+        
+        if labels:
+            for key in self._label_namespaces:
+                label_prediction_loss[key] = self._cross_entropy(logits[key], labels[key].long().view(-1))
+                label_prediction_acc = self.metrics[key + '_acc'](logits[key], labels[key])
+                output_dict[key + '_acc'] = label_prediction_acc
         else:
-            label_prediction_loss = 0
-
-        output_dict['loss'] = loss + label_prediction_loss
+            label_prediction_loss = {'all': torch.zeros(1,1)}
+        output_dict['loss'] = loss + torch.stack(list(label_prediction_loss.values())).sum()
         
         if torch.isnan(loss):
             import ipdb; ipdb.set_trace()
 
         # Keep track of internal states for use downstream
         activations: List[Tuple[str, torch.FloatTensor]] = []
-        intermediate_input = embedded_tokens
+        intermediate_input = embeddings
         for layer_index, layer in enumerate(self.vae.encoder._linear_layers):  # pylint: disable=protected-access
             intermediate_input = layer(intermediate_input)
             activations.append((f"encoder_layer_{layer_index}", intermediate_input))
