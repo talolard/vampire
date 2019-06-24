@@ -20,7 +20,7 @@ from allennlp.common.file_utils import cached_path
 from vampire.common.util import read_text, save_sparse, write_to_json
 
 
-def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "just_spaces") -> List[Dict[str, str]]:
+def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "just_spaces", metadata_fields: List[str] = None) -> List[Dict[str, str]]:
     if tokenizer_type == "just_spaces":
         tokenizer = SpacyWordSplitter()
     elif tokenizer_type == "spacy":
@@ -42,6 +42,13 @@ def load_data(data_path: str, tokenize: bool = False, tokenizer_type: str = "jus
                 text = ' '.join(tokens)
             else:
                 text = example['text']
+            if metadata_fields:
+                metadata = {metadata: example[metadata] for metadata in metadata_fields}
+                example = metadata
+                example['text'] = text
+
+            else:
+                example = { 'text': text}
             tokenized_examples.append(example)
     return tokenized_examples
 
@@ -60,9 +67,9 @@ def write_list_to_file(ls, save_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("--train-path", nargs='+', type=str, required=True,
+    parser.add_argument("--train-path", type=str, required=True,
                         help="Path(s) to the train jsonl file(s).")
-    parser.add_argument("--dev-path", nargs='+', type=str, required=True,
+    parser.add_argument("--dev-path", type=str, required=True,
                         help="Path to the dev jsonl file.")
     parser.add_argument("--serialization-dir", "-s", type=str, required=True,
                         help="Path to store the preprocessed output.")
@@ -74,6 +81,8 @@ if __name__ == '__main__':
                         help="Path to store the preprocessed corpus vocabulary (output file name).") 
     parser.add_argument("--tokenizer-type", type=str, default="just_spaces",
                         help="Path to store the preprocessed corpus vocabulary (output file name).")
+    parser.add_argument("--metadata", nargs="+", type=str, required=False,
+                        help="Path to store the preprocessed corpus vocabulary (output file name).")
     args = parser.parse_args()
 
     if not os.path.isdir(args.serialization_dir):
@@ -84,53 +93,33 @@ if __name__ == '__main__':
     if not os.path.isdir(vocabulary_dir):
         os.mkdir(vocabulary_dir)
 
-    vocabulary: List[str] = []
-    master_train_examples = []
-    train_sources = []
-    for ix, file_ in enumerate(args.train_path):
-        tokenized_train_examples = load_data(cached_path(file_), args.tokenize, args.tokenizer_type)
-        train_sources.extend([example['timestamp'][-5:] for example in tokenized_train_examples])
-        # train_sources.extend([str(ix)] * len(tokenized_train_examples))
-        sub_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
-        sub_count_vectorizer.fit([example['text'] for example in tokenized_train_examples])
-        master_train_examples.extend([example['text'] for example in tokenized_train_examples])
-        vocabulary.extend(sub_count_vectorizer.get_feature_names())
+    
+    tokenized_train_examples = load_data(cached_path(args.train_path), args.tokenize, args.tokenizer_type, args.metadata)
+    master_train_examples = [example['text'] for example in tokenized_train_examples]
 
-    dev_sources = []
-    master_dev_examples = []
-    for ix, file_ in enumerate(args.dev_path):
-        tokenized_dev_examples = load_data(cached_path(file_), args.tokenize, args.tokenizer_type)
-        dev_sources.extend([example['timestamp'][-5:] for example in tokenized_train_examples])
-        # dev_sources.extend([str(ix)] * len(tokenized_dev_examples))
-        sub_count_vectorizer = CountVectorizer(stop_words='english', max_features=args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
-        sub_count_vectorizer.fit([example['text'] for example in tokenized_dev_examples])
-        master_dev_examples.extend([example['text'] for example in tokenized_dev_examples])
-        vocabulary.extend(sub_count_vectorizer.get_feature_names())
+    tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type, args.metadata)
+    master_dev_examples = [example['text'] for example in tokenized_dev_examples]
 
-    # tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type)
-
-    vocabulary = list(set(vocabulary))
-    master_count_vectorizer = CountVectorizer(stop_words='english', token_pattern=r'\b[^\d\W]{3,30}\b')
-    master_count_vectorizer.vocabulary = vocabulary
+    count_vectorizer = CountVectorizer(stop_words='english', max_features = args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
 
     print("fitting count vectorizer...")
     
     text = master_train_examples + master_dev_examples
 
-    master_count_vectorizer.fit(tqdm(text, desc="all"))
+    count_vectorizer.fit(tqdm(text, desc="all"))
 
     print("transforming examples...")
-    vectorized_train_examples = master_count_vectorizer.transform(tqdm(master_train_examples, desc="train"))
-    vectorized_dev_examples = master_count_vectorizer.transform(tqdm(master_dev_examples, desc="dev"))
+    vectorized_train_examples = count_vectorizer.transform(tqdm(master_train_examples, desc="train"))
+    vectorized_dev_examples = count_vectorizer.transform(tqdm(master_dev_examples, desc="dev"))
    
     # add @@unknown@@ token vector
     vectorized_train_examples = sparse.hstack((np.array([0] * len(master_train_examples))[:,None], vectorized_train_examples))
-    vectorized_dev_examples = sparse.hstack((np.array([0] * len(tokenized_dev_examples))[:,None], vectorized_dev_examples))
+    vectorized_dev_examples = sparse.hstack((np.array([0] * len(master_dev_examples))[:,None], vectorized_dev_examples))
     master = sparse.vstack([vectorized_train_examples, vectorized_dev_examples])
 
     # generate background frequency
     print("generating background frequency...")
-    bgfreq = dict(zip(master_count_vectorizer.get_feature_names(), np.asarray(master.sum(1)).squeeze(1) / args.vocab_size))
+    bgfreq = dict(zip(count_vectorizer.get_feature_names(), np.asarray(master.sum(1)).squeeze(1) / args.vocab_size))
     
     print("saving data...")
     save_sparse(vectorized_train_examples, os.path.join(args.serialization_dir, "train.npz"))
@@ -138,11 +127,14 @@ if __name__ == '__main__':
 
     write_to_json(bgfreq, os.path.join(args.serialization_dir, "vampire.bgfreq"))
     
-    if train_sources:
-        write_list_to_file(train_sources, os.path.join(args.serialization_dir, "train_sources.txt"))
-        write_list_to_file(dev_sources, os.path.join(args.serialization_dir, "dev_sources.txt"))
-        write_list_to_file(['@@UNKNOWN@@'] + list(set(train_sources)), os.path.join(vocabulary_dir, "labels.txt"))
+    if args.metadata:
+        for field in args.metadata:
+            metadata_train_items = [str(item[field]) for item in tokenized_train_examples]
+            metadata_dev_items = [str(item[field]) for item in tokenized_dev_examples]
+            write_list_to_file(metadata_train_items, os.path.join(args.serialization_dir, field + "_train.txt"))
+            write_list_to_file(metadata_dev_items, os.path.join(args.serialization_dir, field + "_dev.txt"))
+            write_list_to_file(['@@UNKNOWN@@'] + list(set(metadata_train_items + metadata_dev_items)), os.path.join(vocabulary_dir, field + "_labels.txt"))
 
-    write_list_to_file(['@@UNKNOWN@@'] + master_count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
+    write_list_to_file(['@@UNKNOWN@@'] + count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))
     write_list_to_file(['*tags', '*labels', 'vampire'], os.path.join(vocabulary_dir, "non_padded_namespaces.txt"))
 

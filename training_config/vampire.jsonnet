@@ -3,8 +3,11 @@ local CUDA_DEVICE = std.parseInt(std.extVar("CUDA_DEVICE"));
 local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE) = {
   "lazy": LAZY == 1,
   "type": "vampire_reader",
-  "covariate_train_file": COVARIATE_TRAIN_FILE,
-  "covariate_dev_file": COVARIATE_DEV_FILE,
+  "covariates": {
+    "year": std.extVar("YEAR_FILES"),
+    "month": std.extVar("MONTH_FILES"),
+    "day": std.extVar("DAY_FILES")
+  }
 };
 
 {
@@ -34,12 +37,13 @@ local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE) = {
       "reference_vocabulary": std.extVar("REFERENCE_VOCAB"),
       "update_background_freq": std.parseInt(std.extVar("UPDATE_BACKGROUND_FREQUENCY")) == 1,
       "track_npmi": std.parseInt(std.extVar("TRACK_NPMI")) == 1,
+      "metadata_predictors": ["year_labels"],
       "vae": {
          "z_dropout": std.extVar("Z_DROPOUT"),
          "encoder": {
             "activations": std.makeArray(std.parseInt(std.extVar("NUM_ENCODER_LAYERS")), function(i) std.extVar("ENCODER_ACTIVATION")),
             "hidden_dims": std.makeArray(std.parseInt(std.extVar("NUM_ENCODER_LAYERS")), function(i) std.parseInt(std.extVar("VAE_HIDDEN_DIM"))),
-            "input_dim": std.parseInt(std.extVar("VOCAB_SIZE")) + 1,
+            "input_dim": std.parseInt(std.extVar("VOCAB_SIZE")) + 1 + 52,
             "num_layers": std.parseInt(std.extVar("NUM_ENCODER_LAYERS"))
          },
          "mean_projection": {

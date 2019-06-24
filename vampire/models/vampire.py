@@ -81,6 +81,7 @@ class VAMPIRE(Model):
                  reference_vocabulary: str = None,
                  background_data_path: str = None,
                  update_background_freq: bool = False,
+                 metadata_predictors: List[str] = None,
                  track_topics: bool = True,
                  track_npmi: bool = True,
                  initializer: InitializerApplicator = InitializerApplicator(),
@@ -98,11 +99,14 @@ class VAMPIRE(Model):
         self._ref_counts = reference_counts
         self._prediction_layers = {}
         self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
-        
-        for label in self._label_namespaces:
-            self.metrics[label+'_acc'] = CategoricalAccuracy()
-            self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
-                                                       self.vocab.get_vocab_size(label))
+        self._metadata_predictors = metadata_predictors
+        for label in self._metadata_predictors:
+            if label in self._label_namespaces:
+                self.metrics[label+'_acc'] = CategoricalAccuracy()
+                self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
+                                                                 self.vocab.get_vocab_size(label))
+            else:
+                raise ConfigurationError(f"metadata predictor {label} is not a valid metdata label")
         self._cross_entropy = torch.nn.CrossEntropyLoss()
 
         if reference_vocabulary and self.track_npmi:
@@ -438,13 +442,14 @@ class VAMPIRE(Model):
         theta = variational_output['theta']
 
         logits = {}
-        for key in self._label_namespaces:
+        for key in self._metadata_predictors:
+            self._prediction_layers[key] =  self._prediction_layers[key].to(device=self.device)
             logits[key] = self._prediction_layers[key](theta)
 
         label_prediction_loss = {}
         
         if labels:
-            for key in self._label_namespaces:
+            for key in self._metadata_predictors:
                 label_prediction_loss[key] = self._cross_entropy(logits[key], labels[key].long().view(-1))
                 label_prediction_acc = self.metrics[key + '_acc'](logits[key], labels[key])
                 output_dict[key + '_acc'] = label_prediction_acc
