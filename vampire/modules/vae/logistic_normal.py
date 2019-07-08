@@ -23,13 +23,18 @@ class LogisticNormal(VAE):
         self.encoder = encoder
         self.mean_projection = mean_projection
         self.log_variance_projection = log_variance_projection
+        self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
         self._decoder = torch.nn.Linear(decoder.get_input_dim(), decoder.get_output_dim(),
                                         bias=False)
+        if self._label_namespaces:
+            self._covariate_decoder = torch.nn.Linear(self.vocab.get_vocab_size(self._label_namespaces[0]),
+                                                    decoder.get_output_dim(),
+                                                    bias=False)
         self._z_dropout = torch.nn.Dropout(z_dropout)
         self.latent_dim = mean_projection.get_output_dim()
 
     @overrides
-    def forward(self, input_repr: torch.FloatTensor):  # pylint: disable = W0221
+    def forward(self, input_repr: torch.FloatTensor, labels: torch.Tensor = None):  # pylint: disable = W0221
         """
         Given the input representation, produces the reconstruction from theta
         as well as the negative KL-divergence, theta itself, and the parameters
@@ -38,6 +43,8 @@ class LogisticNormal(VAE):
         output = self.generate_latent_code(input_repr)
         theta = output["theta"]
         reconstruction = self._decoder(theta)
+        if labels is not None and self._covariate_decoder:
+            reconstruction += self._covariate_decoder(labels)
         output["reconstruction"] = reconstruction
 
         return output
@@ -98,7 +105,7 @@ class LogisticNormal(VAE):
 
         # Apply dropout to theta.
         theta = self._z_dropout(z)
-
+        
         # Normalize theta.
         theta = torch.softmax(theta, dim=-1)
 
@@ -115,3 +122,8 @@ class LogisticNormal(VAE):
     @overrides
     def get_beta(self):
         return self._decoder._parameters['weight'].data.transpose(0, 1)  # pylint: disable=W0212
+
+    @overrides
+    def get_covariate_beta(self):
+        return self._covariate_decoder._parameters['weight'].data.transpose(0, 1)  # pylint: disable=W0212
+

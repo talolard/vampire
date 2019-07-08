@@ -100,13 +100,14 @@ class VAMPIRE(Model):
         self._prediction_layers = {}
         self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
         self._metadata_predictors = metadata_predictors
-        for label in self._metadata_predictors:
-            if label in self._label_namespaces:
-                self.metrics[label+'_acc'] = CategoricalAccuracy()
-                self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
-                                                                 self.vocab.get_vocab_size(label))
-            else:
-                raise ConfigurationError(f"metadata predictor {label} is not a valid metdata label")
+        if self._metadata_predictors:
+            for label in self._metadata_predictors:
+                if label in self._label_namespaces:
+                    self.metrics[label+'_acc'] = CategoricalAccuracy()
+                    self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
+                                                                    self.vocab.get_vocab_size(label))
+                else:
+                    raise ConfigurationError(f"metadata predictor {label} is not a valid metdata label")
         self._cross_entropy = torch.nn.CrossEntropyLoss()
 
         if reference_vocabulary and self.track_npmi:
@@ -240,6 +241,16 @@ class VAMPIRE(Model):
                 topic_filepath = os.path.join(ser_dir, "topics", "topics_{}.txt".format(epoch_num[0]))
                 with open(topic_filepath, 'w+') as file_:
                     file_.write(topic_table)
+                if self._metadata_predictors:
+                    topic_table = tabulate(self.extract_topics(self.vae.get_covariate_beta()), headers=["Topic #", "Words"])
+                    topic_dir = os.path.join(os.path.dirname(self.vocab.serialization_dir), "cov_topics")
+                    if not os.path.exists(topic_dir):
+                        os.mkdir(topic_dir)
+                    ser_dir = os.path.dirname(self.vocab.serialization_dir)
+                    topic_filepath = os.path.join(ser_dir, "topics", "cov_topics_{}.txt".format(epoch_num[0]))
+                    with open(topic_filepath, 'w+') as file_:
+                        file_.write(topic_table)
+
 
             if self.track_npmi:
                 if self._ref_vocab:
@@ -398,31 +409,24 @@ class VAMPIRE(Model):
 
         embeddings = [embedded_tokens]
         if labels:
-            for key in self._label_namespaces:
+            for key in self._metadata_predictors:
                 covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
                                                         self.vocab.get_vocab_size(key)).to(device=self.device)
                 covariate_embedding.zero_()
                 covariate_embedding.scatter_(1, labels[key].unsqueeze(-1), 1)
-                embeddings.append(covariate_embedding)
+                # embeddings.append(covariate_embedding)
         else:
-            for key in self._label_namespaces:
-                covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
-                                                        self.vocab.get_vocab_size(key)).to(device=self.device)
-                covariate_embedding.zero_()
-                dummy = torch.from_numpy(np.array(self.vocab._token_to_index[key]['@@UNKNOWN@@'])).repeat(embedded_tokens.shape[0], 1)
-                covariate_embedding.scatter_(1, dummy, 1)
-                embeddings.append(covariate_embedding)
+            covariate_embedding = None
 
         embeddings = torch.cat(embeddings, dim=-1)
         # Encode the text into a shared representation for both the VAE
         # and downstream classifiers to use.
         encoder_output = self.vae.encoder(embeddings)
-
         # Perform variational inference.
         variational_output = self.vae(encoder_output)
 
         # Reconstructed bag-of-words from the VAE with background bias.
-        reconstructed_bow = variational_output['reconstruction'] + self._background_freq
+        reconstructed_bow = variational_output['reconstruction'] + self._background_freq 
 
         # Apply batchnorm to the reconstructed bag of words.
         # Helps with word variety in topic space.
@@ -442,9 +446,10 @@ class VAMPIRE(Model):
         theta = variational_output['theta']
 
         logits = {}
-        for key in self._metadata_predictors:
-            self._prediction_layers[key] =  self._prediction_layers[key].to(device=self.device)
-            logits[key] = self._prediction_layers[key](theta)
+        if labels:
+            for key in self._metadata_predictors:
+                self._prediction_layers[key] =  self._prediction_layers[key].to(device=self.device)
+                logits[key] = self._prediction_layers[key](encoder_output)
 
         label_prediction_loss = {}
         
@@ -457,6 +462,9 @@ class VAMPIRE(Model):
             label_prediction_loss = {'all': torch.zeros(1,1)}
         output_dict['loss'] = loss + torch.stack(list(label_prediction_loss.values())).sum()
         
+        output_dict['nll'] = reconstruction_loss
+        output_dict['nkld'] = negative_kl_divergence
+
         if torch.isnan(loss):
             import ipdb; ipdb.set_trace()
 
@@ -471,8 +479,6 @@ class VAMPIRE(Model):
         
         output_dict['activations'] = activations
 
-        
-        
         # Update metrics
         self.metrics['nkld'](-torch.mean(negative_kl_divergence))
         self.metrics['nll'](-torch.mean(reconstruction_loss))

@@ -1,0 +1,1 @@
+parallel allennlp predict --batch-size 128 --silent --cuda-device {2} --use-dataset-reader --predictor vampire --include-package vampire ./model_logs/vampire_random/model.tar.gz {1} --output-file {1}.out ::: mats/mat* ::: 0 2 3 4 5 6 7

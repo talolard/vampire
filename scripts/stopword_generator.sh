@@ -1,0 +1,1 @@
+pv examples/tweets/sample.dev.2.tokenized | parallel --pipe -q jq '.text|= ascii_downcase |.text' | tr -c '[:alnum:]' '[\n*]'| sort | uniq -c | sort -n | awk '{a[NR]=$0;}END{for(i=1;i<=NR;i++)print a[i],i/NR;}' | awk -F ' ' '$3 > 0.99' | awk '{print $2}' > stopwords.txt

@@ -69,8 +69,10 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(formatter_class = argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--train-path", type=str, required=True,
                         help="Path(s) to the train jsonl file(s).")
-    parser.add_argument("--dev-path", type=str, required=True,
+    parser.add_argument("--dev-path", type=str, required=False,
                         help="Path to the dev jsonl file.")
+    parser.add_argument("--stopwords-path", type=str, required=False,
+                        help="Path to the stopwords file.")
     parser.add_argument("--serialization-dir", "-s", type=str, required=True,
                         help="Path to store the preprocessed output.")
     parser.add_argument("--vocab-size", type=int, required=False, default=10000,
@@ -97,10 +99,21 @@ if __name__ == '__main__':
     tokenized_train_examples = load_data(cached_path(args.train_path), args.tokenize, args.tokenizer_type, args.metadata)
     master_train_examples = [example['text'] for example in tokenized_train_examples]
 
-    tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type, args.metadata)
-    master_dev_examples = [example['text'] for example in tokenized_dev_examples]
+    if args.dev_path:
+        tokenized_dev_examples = load_data(cached_path(args.dev_path), args.tokenize, args.tokenizer_type, args.metadata)
+        master_dev_examples = [example['text'] for example in tokenized_dev_examples]
+    else:
+        master_dev_examples = []
 
-    count_vectorizer = CountVectorizer(stop_words='english', max_features = args.vocab_size, token_pattern=r'\b[^\d\W]{3,30}\b')
+    if args.stopwords_path:
+        stopwords = read_text(args.stopwords_path)
+    else:
+        stopwords = "english"
+
+    vocabulary = read_text(args.vocabulary) if args.vocabulary else None
+    vocab_size = args.vocab_size if not args.vocabulary else len(vocabulary)
+
+    count_vectorizer = CountVectorizer(stop_words=stopwords, max_features = vocab_size, vocabulary=vocabulary, token_pattern=r'\b[^\d\W]{3,30}\b')
 
     print("fitting count vectorizer...")
     
@@ -110,12 +123,19 @@ if __name__ == '__main__':
 
     print("transforming examples...")
     vectorized_train_examples = count_vectorizer.transform(tqdm(master_train_examples, desc="train"))
-    vectorized_dev_examples = count_vectorizer.transform(tqdm(master_dev_examples, desc="dev"))
+    if args.dev_path:
+        vectorized_dev_examples = count_vectorizer.transform(tqdm(master_dev_examples, desc="dev"))
    
     # add @@unknown@@ token vector
-    vectorized_train_examples = sparse.hstack((np.array([0] * len(master_train_examples))[:,None], vectorized_train_examples))
-    vectorized_dev_examples = sparse.hstack((np.array([0] * len(master_dev_examples))[:,None], vectorized_dev_examples))
-    master = sparse.vstack([vectorized_train_examples, vectorized_dev_examples])
+    if not args.vocabulary:
+        vectorized_train_examples = sparse.hstack((np.array([0] * len(master_train_examples))[:,None], vectorized_train_examples))
+        if args.dev_path:
+            vectorized_dev_examples = sparse.hstack((np.array([0] * len(master_dev_examples))[:,None], vectorized_dev_examples))
+
+    if args.dev_path:    
+        master = sparse.vstack([vectorized_train_examples, vectorized_dev_examples])
+    else:
+        master = vectorized_train_examples
 
     # generate background frequency
     print("generating background frequency...")
@@ -123,16 +143,22 @@ if __name__ == '__main__':
     
     print("saving data...")
     save_sparse(vectorized_train_examples, os.path.join(args.serialization_dir, "train.npz"))
-    save_sparse(vectorized_dev_examples, os.path.join(args.serialization_dir, "dev.npz"))
+    if args.dev_path:
+        save_sparse(vectorized_dev_examples, os.path.join(args.serialization_dir, "dev.npz"))
 
     write_to_json(bgfreq, os.path.join(args.serialization_dir, "vampire.bgfreq"))
     
     if args.metadata:
         for field in args.metadata:
             metadata_train_items = [str(item[field]) for item in tokenized_train_examples]
-            metadata_dev_items = [str(item[field]) for item in tokenized_dev_examples]
             write_list_to_file(metadata_train_items, os.path.join(args.serialization_dir, field + "_train.txt"))
-            write_list_to_file(metadata_dev_items, os.path.join(args.serialization_dir, field + "_dev.txt"))
+
+            if args.dev_path:
+                metadata_dev_items = [str(item[field]) for item in tokenized_dev_examples]
+                write_list_to_file(metadata_dev_items, os.path.join(args.serialization_dir, field + "_dev.txt"))
+            else:
+                metadata_dev_items = []
+
             write_list_to_file(['@@UNKNOWN@@'] + list(set(metadata_train_items + metadata_dev_items)), os.path.join(vocabulary_dir, field + "_labels.txt"))
 
     write_list_to_file(['@@UNKNOWN@@'] + count_vectorizer.get_feature_names(), os.path.join(vocabulary_dir, "vampire.txt"))

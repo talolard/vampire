@@ -62,6 +62,14 @@ class VAE(Model):
         """
         raise NotImplementedError
 
+    def get_covariate_beta(self):
+        """
+        Returns
+        -------
+        The topics x vocabulary tensor representing word strengths for each topic.
+        """
+        raise NotImplementedError
+
     def encode(self, input_vector: torch.Tensor):
         """
         Encode the input_vector to the VAE's internal representation.

@@ -8,7 +8,7 @@ import numpy as np
 import torch
 from allennlp.data import Vocabulary
 from scipy import sparse
-
+from tqdm import tqdm
 
 def compute_background_log_frequency(vocab: Vocabulary, vocab_namespace: str, precomputed_bg_file=None):
     """
@@ -112,7 +112,7 @@ def read_json(input_filename):
 def read_jsonlist(input_filename):
     data = []
     with codecs.open(input_filename, 'r', encoding='utf-8') as input_file:
-        for line in input_file:
+        for line in tqdm(input_file):
             data.append(json.loads(line, encoding='utf-8'))
     return data
 
@@ -137,6 +137,11 @@ def unpickle_data(input_filename):
 def read_text(input_filename):
     with codecs.open(input_filename, 'r', encoding='utf-8') as input_file:
         lines = [x.strip() for x in input_file.readlines()]
+    return lines
+
+def read_csv(input_filename, sep='\t'):
+    with codecs.open(input_filename, 'r', encoding='utf-8') as input_file:
+        lines = [item.split(sep) for item in tqdm.tqdm(input_file.readlines())]
     return lines
 
 
@@ -168,6 +173,6 @@ def save_sparse(sparse_matrix, output_filename):
 
 
 def load_sparse(input_filename):
-    npy = np.load(input_filename)
+    npy = np.load(input_filename, allow_pickle=True)
     coo_matrix = sparse.coo_matrix((npy['data'], (npy['row'], npy['col'])), shape=npy['shape'])
     return coo_matrix.tocsc()

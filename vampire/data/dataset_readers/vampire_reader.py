@@ -3,12 +3,15 @@ import json
 import logging
 from glob import glob
 from io import TextIOWrapper
-from typing import Dict
+from typing import Dict, Union
 
 import numpy as np
 from allennlp.common.checks import ConfigurationError
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
+from allennlp.data.tokenizers import Tokenizer
+from allennlp.data.tokenizers.word_splitter import JustSpacesWordSplitter
+from allennlp.data.token_indexers import TokenIndexer, SingleIdTokenIndexer
 from allennlp.data.fields import (ArrayField, Field, LabelField, ListField,
                                   MetadataField, TextField)
 from allennlp.data.instance import Instance
@@ -35,20 +38,39 @@ class VampireReader(DatasetReader):
     lazy : ``bool``, optional, (default = ``False``)
         Whether or not instances can be read lazily.
     """
-    def __init__(self, lazy: bool = False, covariates: Dict[str, str] = None) -> None:
+    def __init__(self,
+                 lazy: bool = False,
+                 covariates: Dict[str, str] = None,
+                 tokenizer: Tokenizer = None,
+                 token_indexers: Dict[str, TokenIndexer] = None,
+                 max_sequence_length: int = 400) -> None:
         super().__init__(lazy=lazy)
-        self._covariates = covariates.as_dict()
+        self._tokenizer = tokenizer or JustSpacesWordSplitter()
+        self._max_sequence_length = 100
+        self._token_indexers = token_indexers or {'tokens': SingleIdTokenIndexer()}
+        if covariates:
+            self._covariates = covariates.as_dict()
+        else:
+            self._covariates = None
+
+    def _truncate(self, tokens):
+        """
+        truncate a set of tokens using the provided sequence length
+        """
+        if len(tokens) > self._max_sequence_length:
+            tokens = tokens[:self._max_sequence_length]
+        return tokens
 
     @overrides
     def _read(self, file_path):
         mat = load_sparse(file_path)        
         mat = mat.tolil()
         covariate_files = {}
-
-        for key, val in self._covariates.items():
-            covariate_files[key] = glob(val)
         labels = {}
-        if covariate_files:
+
+        if self._covariates:
+            for key, val in self._covariates.items():
+                covariate_files[key] = glob(val)
             for label, cov_files in covariate_files.items():
                 if 'train' in file_path:
                     cov_to_use = [x for x in cov_files if "train" in x][0]
@@ -68,7 +90,7 @@ class VampireReader(DatasetReader):
                 yield instance
 
     @overrides
-    def text_to_instance(self, vec: str, **labels) -> Instance:  # type: ignore
+    def text_to_instance(self, tokens_or_vec: Union[str, np.ndarray], **labels) -> Instance:  # type: ignore
         """
         Parameters
         ----------
@@ -87,7 +109,14 @@ class VampireReader(DatasetReader):
         """
         # pylint: disable=arguments-differ
         fields: Dict[str, Field] = {}
-        fields['tokens'] = ArrayField(vec)
+        if isinstance(tokens_or_vec, np.ndarray):
+            fields['tokens'] = ArrayField(tokens_or_vec)
+        else:
+            tokens = self._tokenizer.split_words(tokens_or_vec)
+            if self._max_sequence_length is not None:
+                tokens = self._truncate(tokens)
+            fields['tokens'] = TextField(tokens, self._token_indexers)
         for label, val in labels.items():
             fields[label + "_labels"] = LabelField(val, label_namespace=label + "_labels", skip_indexing=False)
+
         return Instance(fields)
