@@ -39,11 +39,16 @@ CLASSIFIER = {
 }
 
 VAMPIRE = {
+<<<<<<< HEAD
         "LAZY_DATASET_READER": 1,
         "KL_ANNEALING": "sigmoid",
         # "YEAR_FILES": os.environ["DATA_DIR"] + "/year*.txt",
         # "MONTH_FILES": os.environ["DATA_DIR"] + "/month*.txt",
         # "DAY_FILES": os.environ["DATA_DIR"] + "/day*.txt",
+=======
+        "LAZY_DATASET_READER": os.environ.get("LAZY", 0),
+        "KL_ANNEALING": "linear",
+>>>>>>> 2172842e37371c0f910a6cfdce03ee5e7d75e95b
         "SIGMOID_WEIGHT_1": 0.25,
         "SIGMOID_WEIGHT_2": 15,
         "LINEAR_SCALING": 1000,
@@ -66,7 +71,7 @@ VAMPIRE = {
         "TRACK_NPMI": True,
         "CUDA_DEVICE": 0,
         "UPDATE_BACKGROUND_FREQUENCY": 0,
-        "VOCAB_SIZE": 30000,
+        "VOCAB_SIZE": os.environ.get("VOCAB_SIZE", 30000),
         "APPLY_BATCHNORM": 1,
         "BATCH_SIZE": 128,
         "VALIDATION_METRIC": "+npmi"

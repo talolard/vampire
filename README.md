@@ -1,5 +1,3 @@
-[![codecov](https://codecov.io/gh/allenai/vae/branch/master/graph/badge.svg?token=NOriF2Rm8p)](https://codecov.io/gh/allenai/vae)
-
 # VAMPIRE <img src="figures/bat.png" width="60"> 
 
 VAriational Methods for Pretraining In Resource-limited Environments
@@ -45,8 +43,16 @@ All tests should pass.
 
 Alternatively, you can install the repository with Docker.
 
+First, build the container: 
+
 ```
-docker build -f Dockerfile --tag vampire/vampire:latest && docker run -it --runtime=nvidia vampire/vampire:latest
+docker build -f Dockerfile --tag vampire/vampire:latest .
+```
+
+Then, run the container:
+
+```
+docker run -it vampire/vampire:latest
 ```
 
 This will open a shell in a docker container that has all the dependencies installed.
@@ -79,7 +85,18 @@ python -m scripts.preprocess_data \
 
 This script will tokenize your data, and save the resulting output into the specified `serialization-dir`.
 
-In `examples/ag`, you should see:
+Alternatively, under `https://s3-us-west-2.amazonaws.com/allennlp/datasets/ag-news/preprocessed.tar", we have a tar file containing a pre-processed AG news data (with vocab size set to 30K). 
+
+Run 
+
+```
+curl -Lo examples/ag/ag.tar https://s3-us-west-2.amazonaws.com/allennlp/datasets/ag-news/vampire_preprocessed_example.tar
+tar -xvf examples/ag/ag.tar -C examples/
+``` 
+
+to access its contents.
+
+In `examples/ag` (after running the `preprocess_data` module or unpacking `ag.tar`), you should see:
 
 * `train.npz` - pre-computed bag of word representations of the training data
 * `dev.npz` - pre-computed bag of word representations of the dev data
@@ -104,10 +121,17 @@ In `examples/ag/reference`, you should see:
 
 ## Pretrain VAMPIRE
 
-Set your data directory as an environment variable:
+Set your data directory and vocabulary size as environment variables:
 
 ```
 export DATA_DIR="$(pwd)/examples/ag"
+export VOCAB_SIZE=30000
+```
+
+If you're training on a dataset that's to large to fit into RAM, run VAMPIRE in lazy mode by additionally exporting:
+
+```
+export LAZY=1
 ```
 
 Then train VAMPIRE:
