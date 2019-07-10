@@ -39,23 +39,18 @@ CLASSIFIER = {
 }
 
 VAMPIRE = {
-<<<<<<< HEAD
         "LAZY_DATASET_READER": 1,
         "KL_ANNEALING": "sigmoid",
         # "YEAR_FILES": os.environ["DATA_DIR"] + "/year*.txt",
         # "MONTH_FILES": os.environ["DATA_DIR"] + "/month*.txt",
         # "DAY_FILES": os.environ["DATA_DIR"] + "/day*.txt",
-=======
-        "LAZY_DATASET_READER": os.environ.get("LAZY", 0),
-        "KL_ANNEALING": "linear",
->>>>>>> 2172842e37371c0f910a6cfdce03ee5e7d75e95b
         "SIGMOID_WEIGHT_1": 0.25,
         "SIGMOID_WEIGHT_2": 15,
         "LINEAR_SCALING": 1000,
-        "VAE_HIDDEN_DIM":  1024,
+        "VAE_HIDDEN_DIM":  81,
         "ADDITIONAL_UNLABELED_DATA_PATH": None,
-        "TRAIN_PATH": os.environ["DATA_DIR"] + "/train_files/*",
-        "DEV_PATH": os.environ["DATA_DIR"] + "/dev_files/*",
+        "TRAIN_PATH": os.environ["DATA_DIR"] + "/train.npz",
+        "DEV_PATH": os.environ["DATA_DIR"] + "/dev.npz",
         "REFERENCE_COUNTS": os.environ["DATA_DIR"] + "/reference/ref.npz",
         "REFERENCE_VOCAB": os.environ["DATA_DIR"] + "/reference/ref.vocab.json",
         "VOCABULARY_DIRECTORY": os.environ["DATA_DIR"] + "/vocabulary/",
@@ -66,8 +61,9 @@ VAMPIRE = {
         "LOG_VAR_PROJECTION_ACTIVATION": "linear",
         "NUM_LOG_VAR_PROJECTION_LAYERS": 1,
         "SEED": RandomSearch.random_integer(1, 10000),
+        "SAMPLE": None,
         "Z_DROPOUT": 0.49,
-        "LEARNING_RATE": 0.0005,
+        "LEARNING_RATE": 1e-4,
         "TRACK_NPMI": True,
         "CUDA_DEVICE": 0,
         "UPDATE_BACKGROUND_FREQUENCY": 0,

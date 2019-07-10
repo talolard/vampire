@@ -13,7 +13,7 @@ from allennlp.data.vocabulary import Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import TokenEmbedder
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
-from allennlp.training.metrics import Average
+from allennlp.training.metrics import Average, CategoricalAccuracy
 from overrides import overrides
 from scipy import sparse
 from tabulate import tabulate
@@ -79,7 +79,6 @@ class VAMPIRE(Model):
                  reference_vocabulary: str = None,
                  background_data_path: str = None,
                  update_background_freq: bool = False,
-                 metadata_predictors: List[str] = None,
                  track_topics: bool = True,
                  track_npmi: bool = True,
                  initializer: InitializerApplicator = InitializerApplicator(),
@@ -95,27 +94,15 @@ class VAMPIRE(Model):
         self._update_background_freq = update_background_freq
         self._background_freq = self.initialize_bg_from_file(file_=background_data_path)
         self._ref_counts = reference_counts
-<<<<<<< HEAD
         self._prediction_layers = {}
         self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
-        self._metadata_predictors = metadata_predictors
-        if self._metadata_predictors:
-            for label in self._metadata_predictors:
-                if label in self._label_namespaces:
-                    self.metrics[label+'_acc'] = CategoricalAccuracy()
-                    self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
-                                                                    self.vocab.get_vocab_size(label))
-                else:
-                    raise ConfigurationError(f"metadata predictor {label} is not a valid metdata label")
+        for label in self._label_namespaces:
+            self.metrics[label+'_acc'] = CategoricalAccuracy()
+            self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
+                                                            self.vocab.get_vocab_size(label))
         self._cross_entropy = torch.nn.CrossEntropyLoss()
 
         if reference_vocabulary and self.track_npmi:
-=======
-
-        self._npmi_updated = False
-
-        if reference_vocabulary is not None:
->>>>>>> 2172842e37371c0f910a6cfdce03ee5e7d75e95b
             # Compute data necessary to compute NPMI every epoch
             logger.info("Loading reference vocabulary.")
             self._ref_vocab = read_json(cached_path(reference_vocabulary))
@@ -248,7 +235,7 @@ class VAMPIRE(Model):
                 topic_filepath = os.path.join(ser_dir, "topics", "topics_{}.txt".format(self._metric_epoch_tracker))
                 with open(topic_filepath, 'w+') as file_:
                     file_.write(topic_table)
-                if self._metadata_predictors:
+                if self._label_namespaces:
                     topic_table = tabulate(self.extract_topics(self.vae.get_covariate_beta()), headers=["Topic #", "Words"])
                     topic_dir = os.path.join(os.path.dirname(self.vocab.serialization_dir), "cov_topics")
                     if not os.path.exists(topic_dir):
@@ -433,7 +420,7 @@ class VAMPIRE(Model):
 
         embeddings = [embedded_tokens]
         if labels:
-            for key in self._metadata_predictors:
+            for key in self._label_namespaces:
                 covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
                                                         self.vocab.get_vocab_size(key)).to(device=self.device)
                 covariate_embedding.zero_()
@@ -462,6 +449,9 @@ class VAMPIRE(Model):
         # KL-divergence that is returned is the mean of the batch by default.
         negative_kl_divergence = variational_output['negative_kl_divergence']
 
+        if torch.isnan(negative_kl_divergence).any():
+            import ipdb; ipdb.set_trace()
+
         # Compute ELBO
         elbo = negative_kl_divergence * self._kld_weight + reconstruction_loss
 
@@ -471,14 +461,14 @@ class VAMPIRE(Model):
 
         logits = {}
         if labels:
-            for key in self._metadata_predictors:
+            for key in self._label_namespaces:
                 self._prediction_layers[key] =  self._prediction_layers[key].to(device=self.device)
                 logits[key] = self._prediction_layers[key](encoder_output)
 
         label_prediction_loss = {}
         
         if labels:
-            for key in self._metadata_predictors:
+            for key in self._label_namespaces:
                 label_prediction_loss[key] = self._cross_entropy(logits[key], labels[key].long().view(-1))
                 label_prediction_acc = self.metrics[key + '_acc'](logits[key], labels[key])
                 output_dict[key + '_acc'] = label_prediction_acc
@@ -489,8 +479,7 @@ class VAMPIRE(Model):
         output_dict['nll'] = reconstruction_loss
         output_dict['nkld'] = negative_kl_divergence
 
-        if torch.isnan(loss):
-            import ipdb; ipdb.set_trace()
+        
 
         # Keep track of internal states for use downstream
         activations: List[Tuple[str, torch.FloatTensor]] = []

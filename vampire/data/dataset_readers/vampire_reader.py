@@ -42,11 +42,13 @@ class VampireReader(DatasetReader):
                  lazy: bool = False,
                  covariates: Dict[str, str] = None,
                  tokenizer: Tokenizer = None,
+                 sample: int = None,
                  token_indexers: Dict[str, TokenIndexer] = None,
                  max_sequence_length: int = 400) -> None:
         super().__init__(lazy=lazy)
         self._tokenizer = tokenizer or JustSpacesWordSplitter()
         self._max_sequence_length = 100
+        self._sample = sample
         self._token_indexers = token_indexers or {'tokens': SingleIdTokenIndexer()}
         if covariates:
             self._covariates = covariates.as_dict()
@@ -68,6 +70,11 @@ class VampireReader(DatasetReader):
         covariate_files = {}
         labels = {}
 
+        if self._sample:
+            indices = np.random.choice(range(mat.shape[0]), self._sample)
+        else:
+            indices = range(mat.shape[0])
+
         if self._covariates:
             for key, val in self._covariates.items():
                 covariate_files[key] = glob(val)
@@ -80,13 +87,13 @@ class VampireReader(DatasetReader):
                     cov_to_use = [x for x in cov_files if "test" in x][0]                
                 with open(cov_to_use, 'r') as file_:
                     labels[label] = [line.strip() for line in file_.readlines()]
-        for ix in range(mat.shape[0]):
+        for ix in indices:
             if labels:
                 label_subset = {key: val[ix] for key, val in labels.items()}
                 instance = self.text_to_instance(mat[ix].toarray().squeeze(), **label_subset)
             else:
                 instance = self.text_to_instance(mat[ix].toarray().squeeze())
-            if instance is not None:
+            if instance is not None and mat[ix].toarray().squeeze().sum() > 3:
                 yield instance
 
     @overrides

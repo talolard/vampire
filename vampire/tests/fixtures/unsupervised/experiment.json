@@ -28,7 +28,7 @@
       "vae": {
         "type": "logistic_normal",
         "encoder": {
-          "input_dim": 284,
+          "input_dim": 279,
           "num_layers": 2,
           "hidden_dims": [10, 10],
           "activations": ["relu", "relu"]

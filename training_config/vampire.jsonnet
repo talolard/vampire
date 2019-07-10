@@ -1,8 +1,9 @@
 local CUDA_DEVICE = std.parseInt(std.extVar("CUDA_DEVICE"));
 
-local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE) = {
+local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE, SAMPLE) = {
   "lazy": LAZY == 1,
   "type": "vampire_reader",
+  "sample": SAMPLE
   // "covariates": {
   //   "year": std.extVar("YEAR_FILES"),
   //   // "month": std.extVar("MONTH_FILES"),
@@ -14,8 +15,8 @@ local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE) = {
    "numpy_seed": std.extVar("SEED"),
    "pytorch_seed": std.extVar("SEED"),
    "random_seed": std.extVar("SEED"),
-   "dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER")), std.extVar("COVARIATE_TRAIN_FILE"), std.extVar("COVARIATE_DEV_FILE")),
-   "validation_dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER")), std.extVar("COVARIATE_TRAIN_FILE"), std.extVar("COVARIATE_DEV_FILE")),
+   "dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER")), std.extVar("COVARIATE_TRAIN_FILE"), std.extVar("COVARIATE_DEV_FILE"), null),
+   "validation_dataset_reader": BASE_READER(std.parseInt(std.extVar("LAZY_DATASET_READER")), std.extVar("COVARIATE_TRAIN_FILE"), std.extVar("COVARIATE_DEV_FILE"), null),
    "train_data_path": std.extVar("TRAIN_PATH"),
    "validation_data_path": std.extVar("DEV_PATH"),
    "vocabulary": {
@@ -81,6 +82,11 @@ local BASE_READER(LAZY, COVARIATE_TRAIN_FILE, COVARIATE_DEV_FILE) = {
          "lr": std.extVar("LEARNING_RATE"),
          "type": "adam"
       },
+      // "learning_rate_scheduler": {
+      //   "type": "noam",
+      //   "warmup_steps": 10000,
+      //   "model_size": std.parseInt(std.extVar("VAE_HIDDEN_DIM"))
+      // },
       "validation_metric": std.extVar("VALIDATION_METRIC")
    }
 }
