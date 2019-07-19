@@ -367,7 +367,8 @@ class VAMPIRE(Model):
     @overrides
     def forward(self,  # pylint: disable=arguments-differ
                 tokens: Union[Dict[str, torch.IntTensor], torch.IntTensor],
-                epoch_num: List[int] = None):
+                epoch_num: List[int] = None,
+                **labels: torch.IntTensor):
         """
         Parameters
         ----------
