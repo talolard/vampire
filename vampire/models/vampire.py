@@ -433,7 +433,25 @@ class VAMPIRE(Model):
 
         loss = -torch.mean(elbo)
 
-        output_dict['loss'] = loss
+        logits = {}
+
+        if labels:
+            for key in self._label_namespaces:
+                self._prediction_layers[key] =  self._prediction_layers[key].to(device=self.device)
+                logits[key] = self._prediction_layers[key](variational_output['theta'])
+
+        label_prediction_loss = {}
+        
+        if labels:
+            for key in self._label_namespaces:
+                label_prediction_loss[key] = self._cross_entropy(logits[key], labels[key].long().view(-1))
+                label_prediction_acc = self.metrics[key + '_acc'](logits[key], labels[key])
+                output_dict[key + '_acc'] = label_prediction_acc
+        else:
+            label_prediction_loss = {'all': torch.zeros(1,1)}
+        
+        output_dict['loss'] = loss + torch.stack(list(label_prediction_loss.values())).sum()
+
 
         output_dict['activations'] = variational_output['activations']
 
