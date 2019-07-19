@@ -37,7 +37,7 @@ class LogisticNormal(VAE):
         self.latent_dim = mean_projection.get_output_dim()
 
     @overrides
-    def forward(self, input_repr: torch.FloatTensor):  # pylint: disable = W0221
+    def forward(self, input_repr: torch.FloatTensor, labels: torch.Tensor = None):  # pylint: disable = W0221
         """
         Given the input representation, produces the reconstruction from theta
         as well as the negative KL-divergence, theta itself, and the parameters
@@ -52,6 +52,8 @@ class LogisticNormal(VAE):
         theta = output["theta"]
         activations.append(('theta', theta))
         reconstruction = self._decoder(theta)
+        if labels is not None and self._covariate_decoder:
+            reconstruction += self._covariate_decoder(labels)
         output["reconstruction"] = reconstruction
         output['activations'] = activations
 
