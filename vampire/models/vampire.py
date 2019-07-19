@@ -413,7 +413,7 @@ class VAMPIRE(Model):
             covariate_embedding = None
     
         # Perform variational inference.
-        variational_output = self.vae(embedded_tokens)
+        variational_output = self.vae(embedded_tokens, covariate_embedding)
 
         # Reconstructed bag-of-words from the VAE with background bias.
         reconstructed_bow = variational_output['reconstruction'] + self._background_freq
