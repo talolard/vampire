@@ -37,7 +37,8 @@ class VampireReader(DatasetReader):
     def __init__(self,
                  lazy: bool = False,
                  sample: int = None,
-                 min_sequence_length: int = 0) -> None:
+                 min_sequence_length: int = 0,
+                 covariates: Dict[str, str]) -> None:
         super().__init__(lazy=lazy)
         self._sample = sample
         self._min_sequence_length = min_sequence_length
@@ -54,6 +55,19 @@ class VampireReader(DatasetReader):
             indices = np.random.choice(range(mat.shape[0]), self._sample)
         else:
             indices = range(mat.shape[0])
+
+        if self._covariates:
+            for key, val in self._covariates.items():
+                covariate_files[key] = glob(val)
+            for label, cov_files in covariate_files.items():
+                if 'train' in file_path:
+                    cov_to_use = [x for x in cov_files if "train" in x][0]
+                elif 'dev' in file_path:
+                    cov_to_use = [x for x in cov_files if "dev" in x][0]
+                elif 'test' in file_path:
+                    cov_to_use = [x for x in cov_files if "test" in x][0]                
+                with open(cov_to_use, 'r') as file_:
+                    labels[label] = [line.strip() for line in file_.readlines()]
 
         for index in indices:
             instance = self.text_to_instance(vec=mat[index].toarray().squeeze())
