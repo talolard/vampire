@@ -3,7 +3,7 @@ from typing import Dict
 from glob import glob
 import numpy as np
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import ArrayField, Field
+from allennlp.data.fields import ArrayField, Field, LabelField
 from allennlp.data.instance import Instance
 from overrides import overrides
 
@@ -104,4 +104,6 @@ class VampireReader(DatasetReader):
         # pylint: disable=arguments-differ
         fields: Dict[str, Field] = {}
         fields['tokens'] = ArrayField(vec)
+        for label, val in labels.items():
+            fields[label + "_labels"] = LabelField(val, label_namespace=label + "_labels", skip_indexing=False)
         return Instance(fields)
