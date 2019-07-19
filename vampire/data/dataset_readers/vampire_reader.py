@@ -75,12 +75,16 @@ class VampireReader(DatasetReader):
                     labels[label] = [line.strip() for line in file_.readlines()]
 
         for index in indices:
-            instance = self.text_to_instance(vec=mat[index].toarray().squeeze())
+            if labels:
+                label_subset = {key: val[index] for key, val in labels.items()}
+                instance = self.text_to_instance(mat[index].toarray().squeeze(), **label_subset)
+            else:  
+                instance = self.text_to_instance(vec=mat[index].toarray().squeeze())
             if instance is not None and mat[index].toarray().sum() > self._min_sequence_length:
                 yield instance
 
     @overrides
-    def text_to_instance(self, vec: str = None) -> Instance:  # type: ignore
+    def text_to_instance(self, vec: str = None, **labels) -> Instance:  # type: ignore
         """
         Parameters
         ----------
