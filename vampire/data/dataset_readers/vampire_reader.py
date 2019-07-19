@@ -1,6 +1,6 @@
 import logging
 from typing import Dict
-
+from glob import glob
 import numpy as np
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.fields import ArrayField, Field
@@ -38,10 +38,14 @@ class VampireReader(DatasetReader):
                  lazy: bool = False,
                  sample: int = None,
                  min_sequence_length: int = 0,
-                 covariates: Dict[str, str]) -> None:
+                 covariates: Dict[str, str] = None) -> None:
         super().__init__(lazy=lazy)
         self._sample = sample
         self._min_sequence_length = min_sequence_length
+        if covariates:
+            self._covariates = covariates.as_dict()
+        else:
+            self._covariates = None
 
     @overrides
     def _read(self, file_path):
@@ -55,7 +59,8 @@ class VampireReader(DatasetReader):
             indices = np.random.choice(range(mat.shape[0]), self._sample)
         else:
             indices = range(mat.shape[0])
-
+        labels = {}
+        covariate_files = {}
         if self._covariates:
             for key, val in self._covariates.items():
                 covariate_files[key] = glob(val)
