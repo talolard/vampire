@@ -402,6 +402,16 @@ class VAMPIRE(Model):
         else:
             embedded_tokens = tokens
 
+        if labels:
+            for key in self._label_namespaces:
+                covariate_embedding = torch.FloatTensor(embedded_tokens.shape[0],
+                                                        self.vocab.get_vocab_size(key)).to(device=self.device)
+                covariate_embedding.zero_()
+                covariate_embedding.scatter_(1, labels[key].unsqueeze(-1), 1)
+                # embeddings.append(covariate_embedding)
+        else:
+            covariate_embedding = None
+    
         # Perform variational inference.
         variational_output = self.vae(embedded_tokens)
 
