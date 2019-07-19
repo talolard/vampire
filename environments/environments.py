@@ -42,6 +42,7 @@ VAMPIRE = {
         "LAZY_DATASET_READER": os.environ.get("LAZY", 0),
         "KL_ANNEALING": "linear",
         "KLD_CLAMP": None,
+        "COVARIATE_FILES": {"month": os.environ["DATA_DIR"] + "/months.*"},
         "SIGMOID_WEIGHT_1": 0.25,
         "SIGMOID_WEIGHT_2": 15,
         "LINEAR_SCALING": 1000,
