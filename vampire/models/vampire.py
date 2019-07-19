@@ -13,7 +13,7 @@ from allennlp.data.vocabulary import Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import TokenEmbedder
 from allennlp.nn import InitializerApplicator, RegularizerApplicator
-from allennlp.training.metrics import Average
+from allennlp.training.metrics import Average, CategoricalAccuracy
 from overrides import overrides
 from scipy import sparse
 from tabulate import tabulate
@@ -142,6 +142,13 @@ class VAMPIRE(Model):
         self._cur_epoch = 0
         self._cur_npmi = 0.0
         self.batch_num = 0
+
+        for label in self._label_namespaces:
+            self.metrics[label+'_acc'] = CategoricalAccuracy()
+            self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),
+                                                            self.vocab.get_vocab_size(label))
+        self._cross_entropy = torch.nn.CrossEntropyLoss()
+
 
         initializer(self)
 
