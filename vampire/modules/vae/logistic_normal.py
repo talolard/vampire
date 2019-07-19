@@ -25,8 +25,13 @@ class LogisticNormal(VAE):
         self.mean_projection = mean_projection
         self.log_variance_projection = log_variance_projection
         self._kld_clamp = kld_clamp
+        self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
         self._decoder = torch.nn.Linear(decoder.get_input_dim(), decoder.get_output_dim(),
                                         bias=False)
+        if self._label_namespaces:
+            self._covariate_decoder = torch.nn.Linear(self.vocab.get_vocab_size(self._label_namespaces[0]),
+                                                      decoder.get_output_dim(),
+                                                      bias=False)
         self._z_dropout = torch.nn.Dropout(z_dropout)
 
         self.latent_dim = mean_projection.get_output_dim()
