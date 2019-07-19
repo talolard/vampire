@@ -142,6 +142,8 @@ class VAMPIRE(Model):
         self._cur_epoch = 0
         self._cur_npmi = 0.0
         self.batch_num = 0
+        
+        self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
 
         for label in self._label_namespaces:
             self.metrics[label+'_acc'] = CategoricalAccuracy()
