@@ -49,9 +49,9 @@ class LogisticNormal(VAE):
             intermediate_input = layer(intermediate_input)
             activations.append((f"encoder_layer_{layer_index}", intermediate_input))
         output = self.generate_latent_code(intermediate_input)
-        theta = output["theta"]
-        activations.append(('theta', theta))
-        reconstruction = self._decoder(theta)
+        output['encoder_output'] = intermediate_input
+        activations.append(('theta', output["theta"]))
+        reconstruction = self._decoder(output["theta"])
         if labels is not None and self._covariate_decoder:
             reconstruction += self._covariate_decoder(labels)
         output["reconstruction"] = reconstruction

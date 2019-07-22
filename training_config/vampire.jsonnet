@@ -4,7 +4,10 @@ local BASE_READER(LAZY, SAMPLE, MIN_SEQUENCE_LENGTH) = {
   "lazy": LAZY == 1,
   "sample": SAMPLE,
   "type": "vampire_reader",
-  "min_sequence_length": MIN_SEQUENCE_LENGTH
+  "min_sequence_length": MIN_SEQUENCE_LENGTH,
+  "covariates": {
+    "month": "/home/suching/vampire/examples/tweet_subset/months.*"
+  }
 };
 
 {

@@ -144,7 +144,7 @@ class VAMPIRE(Model):
         self.batch_num = 0
         
         self._label_namespaces = [key for key in self.vocab._token_to_index if "label" in key]
-
+        self._prediction_layers = {}
         for label in self._label_namespaces:
             self.metrics[label+'_acc'] = CategoricalAccuracy()
             self._prediction_layers[label] = torch.nn.Linear(self.vae.encoder.get_output_dim(),

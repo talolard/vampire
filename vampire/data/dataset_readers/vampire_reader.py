@@ -76,8 +76,11 @@ class VampireReader(DatasetReader):
 
         for index in indices:
             if labels:
-                label_subset = {key: val[index] for key, val in labels.items()}
-                instance = self.text_to_instance(mat[index].toarray().squeeze(), **label_subset)
+                try:
+                    label_subset = {key: val[index] for key, val in labels.items()}
+                    instance = self.text_to_instance(mat[index].toarray().squeeze(), **label_subset)
+                except:
+                    continue
             else:  
                 instance = self.text_to_instance(vec=mat[index].toarray().squeeze())
             if instance is not None and mat[index].toarray().sum() > self._min_sequence_length:
