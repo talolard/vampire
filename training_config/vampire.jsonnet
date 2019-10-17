@@ -79,6 +79,11 @@ local BASE_READER(LAZY, SAMPLE, MIN_SEQUENCE_LENGTH) = {
          "lr": std.extVar("LEARNING_RATE"),
          "type": "adam"
       },
+      "learning_rate_scheduler": {
+        "type": "slanted_triangular", 
+        "num_epochs": std.parseInt(std.extVar("NUM_EPOCHS")),
+        "num_steps_per_epoch": 100000
+      },
       "validation_metric": std.extVar("VALIDATION_METRIC")
    }
 }

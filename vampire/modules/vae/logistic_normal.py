@@ -59,7 +59,7 @@ class LogisticNormal(VAE):
         """
         mean = self.mean_projection(input_repr)  # pylint: disable=C0103
         log_var = self.log_variance_projection(input_repr)
-        sigma = torch.sqrt(torch.exp(log_var)).clamp(max=10)  # log_var is actually log (variance^2).
+        sigma = torch.sqrt(torch.exp(log_var) + 1e-10).clamp(max=10)  # log_var is actually log (variance^2).
         return {
                 "mean": mean,
                 "variance": sigma,
@@ -72,7 +72,7 @@ class LogisticNormal(VAE):
         Compute the closed-form solution for negative KL-divergence for Gaussians.
         """
         mu, sigma = params["mean"], params["variance"]  # pylint: disable=C0103
-        negative_kl_divergence = 1 + torch.log(sigma ** 2) - mu ** 2 - sigma ** 2
+        negative_kl_divergence = 1 + torch.log(sigma ** 2 + 1e-10) - mu ** 2 - sigma ** 2
         if self._kld_clamp:
             negative_kl_divergence = torch.clamp(negative_kl_divergence,
                                                  min=-1 * self._kld_clamp,
